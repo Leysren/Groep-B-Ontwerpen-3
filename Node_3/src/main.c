@@ -16,6 +16,8 @@
 #define BME_ADDR    0x76
 
 uint8_t Node = 3;
+uint8_t current_brightness = 0;
+int8_t current_temp = 0;
 
 // NRF pipes
 uint8_t pipe0[5] = "0pipe";
@@ -255,8 +257,8 @@ void LED_init(void){
     TCF0.CCB = 0;
 }
 
-// TEMPORARY: Only brightness control (white light)
-void LED_set_brightness(uint8_t brightness){
+//TEMPORARY: Only brightness control (white light)
+/*void LED_set_brightness(uint8_t brightness){
     
     // Clamp input to valid range
     if (brightness > 100) brightness = 100;
@@ -272,8 +274,46 @@ void LED_set_brightness(uint8_t brightness){
     TCF0.CCB = pwm_value;  // Green LED
     TCC0.CCA = pwm_value;  // Blue LED
 }
+*/
+
+void LED_SET_COLOR(uint8_t current_temp){
 
 
+    int8_t brightness_factor = 100 - current_brightness; // Calculate brightness factor (inverse of ambient light)
+    float RED;
+    float GREEN;
+    float BLUE;
+    
+// Clamp brightness input to valid range
+    if (brightness_factor > 100) brightness_factor = 100;
+
+
+    if (current_temp >= 23) {
+        RED = 2.5;
+        GREEN = 0;
+        BLUE = 0;
+    }
+
+    if (current_temp < 23) {
+        RED = 0;
+        GREEN = 2.5;
+        BLUE = 0;
+    }
+
+    // Apply brightness to all channels equally (white light)
+    uint16_t pwm_value_RED = (brightness_factor * 4095 * RED) / 100;
+    uint16_t pwm_value_GREEN = (brightness_factor * 4095 * GREEN) / 100;
+    uint16_t pwm_value_BLUE = (brightness_factor *4095 * BLUE) / 100;
+
+    
+
+    // Set PWM duty cycles
+    TCF0.CCA = pwm_value_RED;  // Red LED
+    TCF0.CCB = pwm_value_GREEN;  // Green LED
+    TCC0.CCA = pwm_value_BLUE;  // Blue LED
+
+}
+   
 
 // ============ MAIN ============
 
@@ -285,7 +325,6 @@ int main(void) {
     LED_init();  // Initialize LEDs
     printf("Temperature Node %d starting...\n", Node);
 
-    uint8_t current_brightness = 0;
     // Setup I2C
     PR.PRPE &= ~PR_TWI_bm;
     _delay_ms(10);
@@ -343,7 +382,17 @@ int main(void) {
 
                 current_brightness = (uint8_t)light_msg.light_percent;
             }
-          LED_set_brightness(current_brightness);  
+
+            if (info.type == MSG_TEMP) {
+                msg_temp_t temp_msg;
+                memcpy(&temp_msg, rx_packet, sizeof(temp_msg));
+                printf("Temperature: %d\n", temp_msg.temperature);
+
+                current_temp = (uint8_t)temp_msg.temperature;
+            }
+//LED_set_brightness(current_brightness);
+
+LED_SET_COLOR(current_temp);
         }
 
 
