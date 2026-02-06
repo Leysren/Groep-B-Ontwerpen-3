@@ -100,3 +100,7 @@ void LED_set_brightness(uint8_t brightness){
     TCF0.CCB = pwm_value;  // Green LED
     TCC0.CCA = pwm_value;  // Blue LED
 }
+
+void LED_SET_COLOR(uint8_t *temperature){
+    
+}
