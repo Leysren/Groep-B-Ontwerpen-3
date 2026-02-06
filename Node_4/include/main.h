@@ -7,6 +7,7 @@
 #define BAUD_100K 100000UL
 #define MSG_TIME 1
 #define MSG_LIGHT 2
+#define MSG_TEMP 3
 
 #define PCF8563_ADDRESS        0x51        /**< iic device address */ 
 
@@ -61,8 +62,17 @@ typedef struct time
     uint8_t second;  
 }msg_time_t;
 
+typedef struct temp
+{
+    msg_info_t info;
+    uint8_t temperature;
+    uint8_t humidity;
+    uint8_t pressure;
+}msg_temp_t;
+
 void pcf8563_get_time(pcf8563_time_t *t);
 void pcf8563_print_time(const pcf8563_time_t *t);
-
+void LED_init(void);
+void LED_set_brightness(uint8_t brightness);
 
 #endif

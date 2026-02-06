@@ -6,6 +6,7 @@
 
 #define MSG_TIME 1
 #define MSG_LIGHT 2
+#define MSG_TEMP 3
 
 //Give identification and data info over the struct, each struct will contain this information
 typedef struct attribute 
@@ -27,6 +28,14 @@ typedef struct time
     uint8_t minute;        
     uint8_t second;  
 }msg_time_t;
+
+typedef struct temp
+{
+    msg_info_t info;
+    uint8_t temperature;
+    uint8_t humidity;
+    uint8_t pressure;
+}msg_temp_t;
 
 
 #endif // package with light data

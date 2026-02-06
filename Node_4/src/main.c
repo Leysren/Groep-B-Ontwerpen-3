@@ -180,6 +180,7 @@ int main(void){
     timer_init();           // Initialize and start timer
     nrf_init(Node);         // Initialize nrf library
     i2c_init(&TWIE, TWI_BAUD(F_CPU, BAUD_100K));
+    LED_init();             // Initialize LEDs
     ucg_t ucg;              // Initialiseer het scherm
     ucg_init(&ucg);
     ucg_SetRotate90(&ucg);
@@ -194,6 +195,7 @@ int main(void){
     //Indentify the node 
     printf("Hi, I am Node %d\n",Node);
     fflush(stdout);
+   uint8_t current_brightness = 0;
 
     //Start the loop
     while (1) {
@@ -238,15 +240,27 @@ int main(void){
                 char Light [20];
                 snprintf(Light, sizeof(Light), "Light: %d", msg_light.light_percent);
                 ucg_DrawString(&ucg, 10, 40, 0, Light);
+
+                current_brightness = (uint8_t)msg_light.light_percent;
             }
 
             else if (info.type == MSG_TIME){
                 msg_time_t msg_time;
                 memcpy(&msg_time, rx_packet, sizeof(msg_time));
                 printf("Time from: %d: %02u:%02u:%02u\n", msg_time.info.user_id, msg_time.hour, msg_time.minute, msg_time.second);
-                fflush(stdout);
+            }
+
+            else if (info.type == MSG_TEMP){
+                msg_temp_t msg_temp;
+                memcpy(&msg_temp, rx_packet, sizeof(msg_temp));
+                printf("Temp from %d: %d\n", msg_temp.info.user_id, msg_temp.temperature);
+
+                char Temp [20];
+                snprintf(Temp, sizeof(Temp), "Temp: %d", msg_temp.temperature);
+                ucg_DrawString(&ucg, 10, 60, 0, Temp);
             }
         }
+        LED_set_brightness(current_brightness);
         //Timeout check 
         if(0){
             // Do something when no message received for some time

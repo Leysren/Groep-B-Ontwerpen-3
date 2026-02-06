@@ -64,3 +64,39 @@ void pcf8563_print_time(const pcf8563_time_t *t)
            t->year);
 }
 
+// Initialize LED settings
+void LED_init(void){
+    PORTF.DIRSET = PIN1_bm; // LED Red
+    PORTF.DIRSET = PIN0_bm; // LED Green
+    PORTC.DIRSET = PIN0_bm; // LED Blue
+
+    // PWM period Blue LED
+    TCC0.PER = 4095;
+    TCC0.CTRLB = TC0_CCAEN_bm | TC_WGMODE_SINGLESLOPE_gc;
+    TCC0.CTRLA = TC_CLKSEL_DIV1_gc;
+    TCC0.CCA = 0;
+
+    // PWM period Red and Green LED
+    TCF0.PER = 4095;
+    TCF0.CTRLB = TC0_CCAEN_bm | TC0_CCBEN_bm | TC_WGMODE_SINGLESLOPE_gc;
+    TCF0.CTRLA = TC_CLKSEL_DIV1_gc;
+    TCF0.CCA = 0;
+    TCF0.CCB = 0;
+}
+
+void LED_set_brightness(uint8_t brightness){
+    
+    // Clamp input to valid range
+    if (brightness > 100) brightness = 100;
+
+    // Calculate brightness factor (inverse of ambient light)
+    uint16_t brightness_factor = 100 - brightness;
+    
+    // Apply brightness to all channels equally (white light)
+    uint16_t pwm_value = (brightness_factor * 4095) / 100;
+    
+    // Set PWM duty cycles
+    TCF0.CCA = pwm_value;  // Red LED
+    TCF0.CCB = pwm_value;  // Green LED
+    TCC0.CCA = pwm_value;  // Blue LED
+}
