@@ -194,8 +194,7 @@ int main(void){
 
     //Indentify the node 
     printf("Hi, I am Node %d\n",Node);
-    fflush(stdout);
-   uint8_t current_brightness = 0;
+    uint8_t current_brightness = 0;
 
     //Start the loop
     while (1) {
@@ -241,7 +240,7 @@ int main(void){
                 snprintf(Light, sizeof(Light), "Light: %d", msg_light.light_percent);
                 ucg_DrawString(&ucg, 10, 40, 0, Light);
 
-                current_brightness = (uint8_t)msg_light.light_percent;
+                current_brightness = msg_light.light_percent;
             }
 
             else if (info.type == MSG_TIME){

@@ -228,6 +228,12 @@ if (rx_flag) {
         memcpy(&msg_time, rx_packet, sizeof(msg_time));
         printf("Time from: %d: %02u:%02u:%02u\n", msg_time.info.user_id, msg_time.hour, msg_time.minute, msg_time.second);
     }
+
+     if (info.type == MSG_TEMP){
+        msg_temp_t msg_temp;
+        memcpy(&msg_temp, rx_packet, sizeof(msg_temp));
+        printf("Temp from: %d: %d\n", msg_temp.info.user_id, msg_temp.temperature);
+    }
 }
     LED_set_brightness(percentage);
     
