@@ -42,7 +42,6 @@ uint8_t Node  = 0;      char    ID[] = "0";
 //uint8_t Node  = 2;    char    ID[] = "2";
 
 // Select which pipes the device should listen to (Subscribe)
-uint8_t ListenTo_pipe0 = 1; // 0 or 1 (R)
 uint8_t ListenTo_pipe1 = 1; // 0 or 1 (G)
 uint8_t ListenTo_pipe2 = 1; // 0 or 1 (B)
 
@@ -140,9 +139,6 @@ void nrf_init(uint8_t b)
     nrfOpenReadingPipe(2, (uint8_t *)BroadcastPipe_3);  // open reading pipe 2 to dummy pipe
 
     // Open reading pipes (selected at start of this script)
-    if(ListenTo_pipe0){
-        nrfOpenReadingPipe(0, (uint8_t *)BroadcastPipe_0);  // open reading pipe 0 to BroadcastPipe_0
-    }
     if(ListenTo_pipe1){
         nrfOpenReadingPipe(1, (uint8_t *)BroadcastPipe_1);  // open reading pipe 1 to BroadcastPipe_1
     }
@@ -197,16 +193,19 @@ int main(void){
 
     //Indentify the node 
     printf("Hi, I am Node %d\n",Node);
+    fflush(stdout);
 
     //Start the loop
     while (1) {
         // Time to send something
         if (timer_flag) {
             pcf8563_get_time(&rtc_time); 
-            msg_s msg_send;
-            msg_send.second = rtc_time.second;
-            msg_send.minute = rtc_time.minute;
+            msg_time_t msg_send;
+            msg_send.info.type = MSG_TIME;
+            msg_send.info.user_id = Node;
             msg_send.hour = rtc_time.hour;
+            msg_send.minute = rtc_time.minute;
+            msg_send.second =  rtc_time.second;
 
             char time_str[20];
             snprintf(time_str, sizeof(time_str),
@@ -217,9 +216,7 @@ int main(void){
             pcf8563_print_time(&rtc_time);
 
             nrfStopListening();
-            cli();
             nrfWrite((uint8_t *)&msg_send, sizeof(msg_send));
-            sei();
             nrfStartListening();
 
             //Reset timer flag
@@ -229,14 +226,28 @@ int main(void){
         // Check if there's data to be read from 
         if (rx_flag) {
             rx_flag = 0;
-            msg_r msg_got;
-            memcpy(&msg_got, rx_packet, sizeof(msg_got));
-            printf("Received from Node: %d\n", msg_got.light_percent);
-            char Light [20];
-            snprintf(Light, sizeof(Light), "Light: %d", msg_got.light_percent);
-            ucg_DrawString(&ucg, 10, 40, 0, Light);
+            msg_info_t info;
+            memcpy(&info, rx_packet, sizeof(info));
+
+            if (info.type == MSG_LIGHT){
+                msg_light_t msg_light;
+                memcpy(&msg_light, rx_packet, sizeof(msg_light));
+                printf("Light from: %d: %d\n", msg_light.info.user_id, msg_light.light_percent);
+                fflush(stdout);
+                
+                char Light [20];
+                snprintf(Light, sizeof(Light), "Light: %d", msg_light.light_percent);
+                ucg_DrawString(&ucg, 10, 40, 0, Light);
+            }
+
+            else if (info.type == MSG_TIME){
+                msg_time_t msg_time;
+                memcpy(&msg_time, rx_packet, sizeof(msg_time));
+                printf("Time from: %d: %02u:%02u:%02u\n", msg_time.info.user_id, msg_time.hour, msg_time.minute, msg_time.second);
+                fflush(stdout);
+            }
         }
-        //Timeout check (dit mogen jullie zelf verzinnen!)
+        //Timeout check 
         if(0){
             // Do something when no message received for some time
         }

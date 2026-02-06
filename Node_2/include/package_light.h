@@ -4,14 +4,29 @@
 
 #include <stdint.h>
 
-typedef struct {
-    uint8_t light_percent;  // 0-100%
-} sensor_packet_t;
+#define MSG_TIME 1
+#define MSG_LIGHT 2
 
-typedef struct {
-    uint8_t hour;
-    uint8_t minute;
-    uint8_t second;
-} time_packet_t;
+//Give identification and data info over the struct, each struct will contain this information
+typedef struct attribute 
+{
+    uint8_t type;
+    uint8_t user_id;
+}msg_info_t;
+
+typedef struct light
+{
+    msg_info_t info;
+    uint8_t light_percent;
+}msg_light_t;
+
+typedef struct time
+{
+    msg_info_t info;
+    uint8_t hour;          
+    uint8_t minute;        
+    uint8_t second;  
+}msg_time_t;
+
 
 #endif // package with light data

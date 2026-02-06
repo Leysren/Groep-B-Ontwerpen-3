@@ -22,8 +22,7 @@ uint8_t Node  = 2;
 char    ID[] = "2"; //assigning the number to our current node
 
 // Select which pipes the device should listen to (Subscribe)
-uint8_t ListenTo_pipe0 = 1; // Node 1
-uint8_t ListenTo_pipe1 = 1; // Node 2
+uint8_t ListenTo_pipe0 = 1; // Node 4
 uint8_t ListenTo_pipe2 = 1; // Node 3
 
 // Define broadcast pipes for sending data to different Nodes
@@ -36,6 +35,9 @@ volatile uint8_t rx_flag = 0;
 
 uint8_t rx_packet[MAXBUF];
 
+
+
+
 // Interrupt when nRF package is received
 ISR(NRF24_IRQ_VEC)
 {
@@ -47,7 +49,7 @@ ISR(NRF24_IRQ_VEC)
     if (rx_dr) {
         packet_length = nrfGetDynamicPayloadSize();
         nrfRead(rx_packet, packet_length);
-        rx_packet[packet_length] = '\0';
+
         rx_flag = 1;
     }
 }
@@ -136,25 +138,29 @@ void nrf_init(uint8_t b)
     nrfFlushRx();
     nrfFlushTx();
 
-    // Only open writing pipe for Node 2
-    printf("12. Open writing pipe\n");
+    // **ADD INTERRUPT CONFIGURATION HERE**
+    printf("12. Configure IRQ pin\n");
+    NRF24_IRQ_PORT.INT0MASK |= NRF24_IRQ_PIN;
+    NRF24_IRQ_PORT.NRF24_IRQ_CTRL = PORT_ISC_FALLING_gc;
+    NRF24_IRQ_PORT.INTCTRL |=
+        (NRF24_IRQ_PORT.INTCTRL & ~PORT_INT0LVL_gm) | PORT_INT0LVL_LO_gc;
+
+    // Open writing pipe for Node 2
+    printf("13. Open writing pipe\n");
     nrfOpenWritingPipe((uint8_t *)BroadcastPipe_2);
 
+    // **FIX THE POINTER CASTS**
     if(ListenTo_pipe0){
-        nrfOpenReadingPipe(0, (uint8_t )BroadcastPipe_0);  // open reading pipe 0 to BroadcastPipe_0
-    }
-    if(ListenTo_pipe1){
-        nrfOpenReadingPipe(1, (uint8_t)BroadcastPipe_1);  // open reading pipe 1 to BroadcastPipe_1
+        nrfOpenReadingPipe(0, (uint8_t *)BroadcastPipe_0); 
     }
     if(ListenTo_pipe2){
-        nrfOpenReadingPipe(2, (uint8_t *)BroadcastPipe_2);  // open reading pipe 2 to BroadcastPipe_2
+        nrfOpenReadingPipe(2, (uint8_t *)BroadcastPipe_2);
     }
 
+    printf("14. Start listening\n");
+    nrfStartListening();
     
-    printf("13. Start listening (TX mode)\n");
-    nrfStartListening();  // Changed from nrfStartListening() since we only transmit
-    
-    printf("14. Power up\n");
+    printf("15. Power up\n");
     nrfPowerUp();
     
     printf("NRF init done!\n");
@@ -180,7 +186,10 @@ int main(void){
     
     LED_init();  // Initialize LEDs
     //printf("LED OK\n"); //debugging led
-    
+    // **ADD THIS - enable low priority interrupts**
+    PMIC.CTRL |= PMIC_LOLVLEN_bm;
+
+
     sei();
     //printf("Interrupts enabled\n"); //debugging interrupts
     
@@ -190,31 +199,36 @@ int main(void){
     nrf_init(0);
     //printf("NRF init complete!\n"); //debugging nrf
     
-    sensor_packet_t packet = {0};  // Create packet
-
-    
 
 while (1) {
     // Your existing light sensor code
     uint16_t adc_value = read_adc();
-    uint16_t percentage = (adc_value * 100UL) / 4095;
+    uint8_t percentage = (adc_value * 100UL) / 4095;
     
-    packet.light_percent = percentage;
+    msg_light_t msg_light;
+    msg_light.info.type = MSG_LIGHT;
+    msg_light.info.user_id = Node;
+    msg_light.light_percent = percentage;
     
     nrfStopListening();
-    nrfWrite((uint8_t*)&packet, sizeof(packet));
+    nrfWrite((uint8_t*)&msg_light, sizeof(msg_light));
     nrfStartListening();
     
     printf("ADC: %u, Light: %u%% SENT\n", adc_value, percentage);
+    _delay_ms(100);
     
-    // Check if time data is available to receive
-    if (rx_flag) {
-            rx_flag = 0;
-            time_packet_t time;
-            memcpy(&time, rx_packet, sizeof(time));
-            printf("Received from Node: %d\n", time.second);
-            printf("Time: %d\n", time.second);
-        }
+// Check if time data is available to receive
+if (rx_flag) {
+    rx_flag = 0;
+    msg_info_t info; 
+    memcpy(&info, rx_packet, sizeof(info));
+    
+    if (info.type == MSG_TIME){
+        msg_time_t msg_time;
+        memcpy(&msg_time, rx_packet, sizeof(msg_time));
+        printf("Time from: %d: %02u:%02u:%02u\n", msg_time.info.user_id, msg_time.hour, msg_time.minute, msg_time.second);
+    }
+}
     LED_set_brightness(percentage);
     
     _delay_ms(500);

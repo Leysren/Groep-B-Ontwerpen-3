@@ -1,13 +1,14 @@
 #ifndef MAIN_H 
 #define MAIN_H 
 
+#include <stdint.h>
 #include "ucglib_xmega.h"
 
 #define BAUD_100K 100000UL
+#define MSG_TIME 1
+#define MSG_LIGHT 2
 
 #define PCF8563_ADDRESS        0x51        /**< iic device address */ 
-
-#include <stdint.h>
 
 // Registers map
 #define PCF8563_REG_CONTROL_STATUS1      0x00        /**< control status1 register */
@@ -39,19 +40,26 @@ typedef struct pcf8563_time_s
     uint8_t second;        /**< second */
 } pcf8563_time_t;
 
-//Received message struct
-typedef struct msg_received
+//Give identification and data info over the struct, each struct will contain this information
+typedef struct attribute 
 {
-    uint8_t light_percent;
-}msg_r;
+    uint8_t type;
+    uint8_t user_id;
+}msg_info_t;
 
-typedef struct msg_sent
-{  
+typedef struct light
+{
+    msg_info_t info;
+    uint8_t light_percent;
+}msg_light_t;
+
+typedef struct time
+{
+    msg_info_t info;
     uint8_t hour;          
     uint8_t minute;        
     uint8_t second;  
-}msg_s;
-
+}msg_time_t;
 
 void pcf8563_get_time(pcf8563_time_t *t);
 void pcf8563_print_time(const pcf8563_time_t *t);
