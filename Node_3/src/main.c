@@ -19,6 +19,7 @@ uint8_t Node = 3;
 uint8_t current_brightness = 0;
 int8_t current_temp = 0;
 
+
 // NRF pipes
 uint8_t pipe0[5] = "0pipe";
 uint8_t pipe1[5] = "1pipe";
@@ -31,6 +32,7 @@ uint8_t rx_packet[MAXBUF];
 
 // timer_flag is raised by timer/counter IRQ
 volatile uint8_t timer_flag = 0;
+
 // BME280 calibration values
 uint16_t dig_T1;
 int16_t  dig_T2, dig_T3;
@@ -82,21 +84,21 @@ void nrf_init(void) {
     nrfFlushRx();
     nrfFlushTx();
 
-    // Interrupt pin config (was missing!)
+    // Interrupt pin config
     NRF24_IRQ_PORT.INT0MASK |= NRF24_IRQ_PIN;
     NRF24_IRQ_PORT.NRF24_IRQ_CTRL = PORT_ISC_FALLING_gc;
     NRF24_IRQ_PORT.INTCTRL |=
         (NRF24_IRQ_PORT.INTCTRL & ~PORT_INT0LVL_gm) | PORT_INT0LVL_LO_gc;
 
     // Writing pipe for Node 3
-    nrfOpenWritingPipe(pipe3);
+    nrfOpenWritingPipe(pipe1);
 
    
 
     // Then open the ones we actually want to listen to
     nrfOpenReadingPipe(0, pipe0);  // Listen to screen node (Node 0)
-    nrfOpenReadingPipe(1, pipe1);  // Listen to Node 1
-    nrfOpenReadingPipe(2, pipe2);  // Listen to light node (Node 2)
+    nrfOpenReadingPipe(1, pipe1);  // Listen to Node 1 (Node 3)
+    nrfOpenReadingPipe(2, pipe2);  // Listen to light node (Node 2)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                r  r                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr  r   r                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       rr 
 
     nrfStartListening();
     nrfPowerUp();
@@ -284,10 +286,10 @@ void LED_SET_COLOR(uint8_t current_temp){
     float GREEN;
     float BLUE;
     
-// Clamp brightness input to valid range
+    // Clamp brightness input to valid range
     if (brightness_factor > 100) brightness_factor = 100;
 
-
+    //here i set the color based on the temperature, you can adjust the threshold and colors as needed
     if (current_temp >= 23) {
         RED = 2.5;
         GREEN = 0;
@@ -300,7 +302,7 @@ void LED_SET_COLOR(uint8_t current_temp){
         BLUE = 0;
     }
 
-    // Apply brightness to all channels equally (white light)
+    // Apply colors and brightness to all channels.
     uint16_t pwm_value_RED = (brightness_factor * 4095 * RED) / 100;
     uint16_t pwm_value_GREEN = (brightness_factor * 4095 * GREEN) / 100;
     uint16_t pwm_value_BLUE = (brightness_factor *4095 * BLUE) / 100;
@@ -350,6 +352,10 @@ int main(void) {
         uint16_t pressure    = compensate_pressure(raw_pres) / 100;
         uint16_t humidity    = compensate_humidity(raw_hum) / 1024;
 
+
+        // Update with your own reading
+        current_temp = (int8_t)temperature; 
+
         // 3. Build message
         msg_temp_t msg;
         msg.info.type    = MSG_TEMP;
@@ -363,39 +369,39 @@ int main(void) {
 
         printf("T:%d H:%u P:%u\n", temperature, humidity, pressure);
 
-        // 5. Check for incoming time messages
-        if (rx_flag) {
-            rx_flag = 0;
-            msg_info_t info;
-            memcpy(&info, rx_packet, sizeof(info));
+        // 5. Check for incoming messages
+    if (rx_flag) {
+        rx_flag = 0;
+        msg_info_t info;
+        memcpy(&info, rx_packet, sizeof(info));
 
-            if (info.type == MSG_TIME) {
-                msg_time_t time_msg;
-                memcpy(&time_msg, rx_packet, sizeof(time_msg));
-                printf("Time: %02u:%02u:%02u\n", time_msg.hour, time_msg.minute, time_msg.second);
-            }
-
-            if (info.type == MSG_LIGHT) {
-                msg_light_t light_msg;
-                memcpy(&light_msg, rx_packet, sizeof(light_msg));
-                printf("LIGHT: %d\n", light_msg.light_percent);
-
-                current_brightness = (uint8_t)light_msg.light_percent;
-            }
-
-            if (info.type == MSG_TEMP) {
-                msg_temp_t temp_msg;
-                memcpy(&temp_msg, rx_packet, sizeof(temp_msg));
-                printf("Temperature: %d\n", temp_msg.temperature);
-
-                current_temp = (uint8_t)temp_msg.temperature;
-            }
-//LED_set_brightness(current_brightness);
-
-LED_SET_COLOR(current_temp);
-        }
-
-
-        _delay_ms(500);
+    if (info.type == MSG_TIME) {
+        msg_time_t time_msg;
+        memcpy(&time_msg, rx_packet, sizeof(time_msg));
+        printf("Time: %02u:%02u:%02u\n", time_msg.hour, time_msg.minute, time_msg.second);
     }
+
+    if (info.type == MSG_LIGHT) {
+        msg_light_t light_msg;
+        memcpy(&light_msg, rx_packet, sizeof(light_msg));
+        printf("LIGHT: %d\n", light_msg.light_percent);
+
+        current_brightness = (uint8_t)light_msg.light_percent;
+    }
+
+    if (info.type == MSG_TEMP) {
+        msg_temp_t temp_msg;
+        memcpy(&temp_msg, rx_packet, sizeof(temp_msg));
+        printf("Temperature: %d\n", temp_msg.temperature);
+
+    
+    }
+}
+
+// Always update LED based on current values
+LED_SET_COLOR(current_temp); //
+
+_delay_ms(500);}
+
+return 0;
 }
