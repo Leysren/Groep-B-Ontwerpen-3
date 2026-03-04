@@ -1,16 +1,16 @@
 /*
  * main.c — Node 2 Showcase
  *
- * BME280 sensor + NRF24 + motor control + stopper buttons + LEDs
+ * BME280 + NRF + motor control + stopper buttons + LEDs + TEMP MODE + LIGHT MODE
  *
  * Pinout:
- *   BME280 SCL  -> PE0  (I2C)
- *   BME280 SDA  -> PE1  (I2C)
+ *   BME280 SCL  -> PE0  (TWIE)
+ *   BME280 SDA  -> PE1  (TWIE)
  *   Red  LED    -> PD0   — closing indicator
  *   Green LED   -> PD1   — opening indicator
- *   Motor PWM   -> PD4   — connect to L293D pin 1 (EN1)
- *   Motor LEFT  -> PA0   — connect to L293D pin 2 (1A)
- *   Motor RIGHT -> PA1   — connect to L293D pin 7 (2A)
+ *   Motor PWM   -> PD4   — connect to H-bridge pin 1 (EN1)
+ *   Motor LEFT  -> PA0   — connect to H-bridge pin 2 (1A)
+ *   Motor RIGHT -> PA1   — connect to H-bridge pin 7 (2A)
  *   Left stopper button  -> PA6
  *   Right stopper button -> PA5
  *   Mode switch button   -> PA7  (TEMP/LIGHT mode)
@@ -29,14 +29,13 @@
 #include "nrf24L01.h"
 #include "i2c.h"
 #include "package_temp.h"
-
 #include "adc_light.h"
 
 #define NRF_CHANNEL 2
 #define MAXBUF      32
 #define BME_ADDR    0x76
 
-// light threshold — ADC is 12-bit (0-4095), so 50% = 2047 (i am too tired to fuck with percentage)
+// light threshold — ADC is 12-bit (0-4095), so 50% = 2047
 #define LIGHT_CLOSE_ABOVE  2050   // close curtains if light is above this
 #define LIGHT_OPEN_BELOW   2000   // open curtains if light is below this
 
@@ -45,11 +44,11 @@ uint8_t current_brightness = 0;
 int8_t  current_temp = 0;
 uint16_t current_light = 0;   // raw ADC reading from PA2 (0-4095)
 
-// NRF pipes
-uint8_t pipe0[5] = "0pipe";
-uint8_t pipe1[5] = "1pipe";
-uint8_t pipe2[5] = "2pipe";
-uint8_t pipe3[5] = "3pipe";
+// broadcast pipes — must match all other nodes
+uint8_t BroadcastPipe_0[5] = "0pipe";
+uint8_t BroadcastPipe_1[5] = "1pipe";
+uint8_t BroadcastPipe_2[5] = "2pipe";
+uint8_t BroadcastPipe_3[5] = "3pipe";   // dummy pipe / Node 3 writing pipe
 
 // RX interrupt variables
 volatile uint8_t rx_flag = 0;
@@ -82,7 +81,7 @@ MotorState motor_state = MOTOR_STOP;
 typedef enum { SPEED_SLOW, SPEED_FAST } SpeedPreset;
 SpeedPreset speed_preset = SPEED_SLOW;
 
-// operating mode — press both buttons to switch between temperature and light control
+// operating mode — PA7 button switches between temperature and light control
 typedef enum { MODE_TEMP, MODE_LIGHT } OperatingMode;
 OperatingMode current_mode = MODE_TEMP;
 
@@ -145,16 +144,22 @@ void nrf_init(void) {
     nrfFlushRx();
     nrfFlushTx();
 
-    // Interrupt pin config
+    // interrupt pin config
     NRF24_IRQ_PORT.INT0MASK |= NRF24_IRQ_PIN;
     NRF24_IRQ_PORT.NRF24_IRQ_CTRL = PORT_ISC_FALLING_gc;
     NRF24_IRQ_PORT.INTCTRL |=
         (NRF24_IRQ_PORT.INTCTRL & ~PORT_INT0LVL_gm) | PORT_INT0LVL_LO_gc;
 
-    nrfOpenWritingPipe(pipe1);
-    nrfOpenReadingPipe(0, pipe0);
-    nrfOpenReadingPipe(1, pipe1);
-    nrfOpenReadingPipe(2, pipe2);
+    // open all pipes to dummy first (same pattern as the other nodes)
+    nrfOpenReadingPipe(0, BroadcastPipe_3);
+    nrfOpenReadingPipe(1, BroadcastPipe_3);
+    nrfOpenReadingPipe(2, BroadcastPipe_3);
+
+    // pipe 1 listens for Node 3 (light sender, writes on BroadcastPipe_3)
+    nrfOpenReadingPipe(1, BroadcastPipe_0);
+
+    // this node (Node 2) writes on pipe 2
+    nrfOpenWritingPipe(BroadcastPipe_2);
 
     nrfStartListening();
     nrfPowerUp();
@@ -411,7 +416,7 @@ uint8_t btn_left(void)   { return !(PORTA.IN & PIN6_bm); }   // left stopper  PA
 uint8_t btn_right(void)  { return !(PORTA.IN & PIN5_bm); }   // right stopper PA5
 uint8_t btn_mode(void)   { return !(PORTA.IN & PIN7_bm); }   // mode switch   PA7
 
-// checks stopper buttons, speed and mode switch
+// checks stopper buttons, speed toggle and mode switch
 void handle_buttons(void) {
     static uint8_t both_last = 0;
     static uint8_t mode_last = 0;
@@ -490,9 +495,9 @@ void handle_window(void) {
 
 // ============ WINDOW CONTROL — LIGHT MODE ============
 
-// opens or closes curtains based on light reading
+// opens or closes curtains based on light reading from own ADC sensor
 void handle_window_light(void) {
-    if (motor_state != MOTOR_STOP) return;   // already moving, leave it alone
+    if (motor_state != MOTOR_STOP) return;
 
     if (current_light > LIGHT_CLOSE_ABOVE) {
         // too bright — close curtains, unless already closed
@@ -526,7 +531,7 @@ int main(void) {
     init_buttons();
     init_adc();
 
-    printf("Temperature Node %d starting...\n", Node);
+    printf("Node %d starting...\n", Node);
 
     // I2C for BME280
     PR.PRPE &= ~PR_TWI_bm;
@@ -556,7 +561,7 @@ int main(void) {
 
         current_temp = (int8_t)temperature;
 
-        // read light sensor
+        // read own light sensor on PA2
         current_light = read_adc();
 
         // decide if window needs to move
@@ -603,13 +608,14 @@ int main(void) {
             if (info.type == MSG_LIGHT) {
                 msg_light_t light_msg;
                 memcpy(&light_msg, rx_packet, sizeof(light_msg));
-                printf("LIGHT: %d\n", light_msg.light_percent);
+                // print the light value received from Node 3
+                printf("Light from Node %d: %d\n", light_msg.info.user_id, light_msg.light_percent);
                 current_brightness = (uint8_t)light_msg.light_percent;
             }
             if (info.type == MSG_TEMP) {
                 msg_temp_t temp_msg;
                 memcpy(&temp_msg, rx_packet, sizeof(temp_msg));
-                printf("Temperature: %d\n", temp_msg.temperature);
+                printf("Temp from Node %d: %d\n", temp_msg.info.user_id, temp_msg.temperature);
             }
         }
 
